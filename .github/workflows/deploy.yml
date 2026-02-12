@@ -5,13 +5,13 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,23 +25,15 @@ jobs:
         run: npm install
 
       - name: Build
-        # Pass the API key from GitHub Secrets to the build process
         env:
           VITE_API_KEY: ${{ secrets.VITE_API_KEY }}
         run: npm run build
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      # Fix: Use peaceiris/actions-gh-pages to push to a branch instead of using the API
+      # This works better with the default "Deploy from a branch" setting in GitHub
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          path: ./dist
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          force_orphan: true
