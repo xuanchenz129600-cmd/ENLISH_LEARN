@@ -34,7 +34,7 @@ interface Particle {
   id: number;
   x: number;
   y: number;
-  style: React.CSSProperties;
+  style: React.CSSProperties & Record<string, any>; // Fix: Allow custom CSS vars like --color
 }
 
 const WordModule: React.FC<Props> = ({ unitId, onBack }) => {
@@ -463,8 +463,8 @@ const WordModule: React.FC<Props> = ({ unitId, onBack }) => {
                         className="absolute rounded-full animate-suck-in"
                         style={{
                             ...p.style,
-                            backgroundColor: p.style['--color' as any],
-                            boxShadow: `0 0 10px ${p.style['--color' as any]}, 0 0 20px ${p.style['--color' as any]}`
+                            backgroundColor: p.style['--color'],
+                            boxShadow: `0 0 10px ${p.style['--color']}, 0 0 20px ${p.style['--color']}`
                         }}
                     />
                 ))}
