@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 
 export interface DictionaryEntry {
@@ -16,7 +17,17 @@ export interface DictionaryEntry {
   }[];
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// FIX: Do not initialize globally to avoid crash on load if key is missing
+// const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+const getAiClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    console.warn("⚠️ API Key missing. AI features will be disabled.");
+    return null;
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 export const dictionaryService = {
   fetchDefinition: async (word: string): Promise<DictionaryEntry | null> => {
@@ -25,36 +36,43 @@ export const dictionaryService = {
 
       // 1. Fire requests in parallel:
       // - Free Dictionary API for Audio/Phonetics (Native Sound)
-      // - Gemini for Chinese Definitions (Translation)
       const audioPromise = fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${cleanWord}`)
         .then(res => res.ok ? res.json() : null)
         .catch(() => null);
 
-      const aiPromise = ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Define the English word "${cleanWord}" for a Chinese learner.
-                   Provide the definition in Simplified Chinese (Mandarin).
-                   Provide a short English example sentence for each definition.`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              word: { type: Type.STRING },
-              phonetic: { type: Type.STRING, description: "IPA Phonetic transcription" },
-              meanings: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    partOfSpeech: { type: Type.STRING },
-                    definitions: {
-                      type: Type.ARRAY,
-                      items: {
-                        type: Type.OBJECT,
-                        properties: {
-                          definition: { type: Type.STRING, description: "Simplified Chinese definition" },
-                          example: { type: Type.STRING, description: "English example sentence" }
+      // - Gemini for Chinese Definitions (Translation)
+      // Check for AI client safely
+      const ai = getAiClient();
+      let aiPromise = Promise.resolve(null as any);
+
+      if (ai) {
+          aiPromise = ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `Define the English word "${cleanWord}" for a Chinese learner.
+                       Provide the definition in Simplified Chinese (Mandarin).
+                       Provide a short English example sentence for each definition.`,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  word: { type: Type.STRING },
+                  phonetic: { type: Type.STRING, description: "IPA Phonetic transcription" },
+                  meanings: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        partOfSpeech: { type: Type.STRING },
+                        definitions: {
+                          type: Type.ARRAY,
+                          items: {
+                            type: Type.OBJECT,
+                            properties: {
+                              definition: { type: Type.STRING, description: "Simplified Chinese definition" },
+                              example: { type: Type.STRING, description: "English example sentence" }
+                            }
+                          }
                         }
                       }
                     }
@@ -62,16 +80,18 @@ export const dictionaryService = {
                 }
               }
             }
-          }
-        }
-      });
+          }).catch((e: any) => {
+             console.error("AI Request Failed", e);
+             return null;
+          });
+      }
 
       const [apiData, aiResponse] = await Promise.all([audioPromise, aiPromise]);
 
       // 2. Parse Gemini Result
       let result: DictionaryEntry | null = null;
       
-      if (aiResponse.text) {
+      if (aiResponse && aiResponse.text) {
         try {
           const aiJson = JSON.parse(aiResponse.text);
           result = {
@@ -123,6 +143,9 @@ export const dictionaryService = {
   // New generic translation method for sentences and texts
   translateToChinese: async (text: string): Promise<string | null> => {
     try {
+      const ai = getAiClient();
+      if (!ai) return null;
+
       const result = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `Translate the following English text into natural, fluent Simplified Chinese.
