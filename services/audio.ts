@@ -1,7 +1,7 @@
 /* ================================================================
  * audio.ts
- * Desktop: Web Speech API (unchanged)
- * Mobile:  fetch GET your Worker -> Audio(mp3)
+ * Desktop: Web Speech API (System Native)
+ * Mobile:  fetch POST Cloudflare Pages -> Audio(mp3)
  * ================================================================ */
 
 declare global {
@@ -17,11 +17,14 @@ declare global {
 
 let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
 
-// Your GET worker endpoint
-const EDGE_TTS_WORKER_BASE = "https://zhangchen981109.dpdns.org/";
+// 👇👇👇 请在这里配置你的 Cloudflare Pages 信息 👇👇👇
+const EDGE_TTS_API_BASE = "https://myprotts.xuanchenz129600.workers.dev"; // 你的 Pages 域名 (不要带 /v1/...)
+const EDGE_TTS_API_KEY = "sk-123456"; // 你在 Pages 设置里填写的 API_KEY
+// 👆👆👆 配置结束 👆👆👆
 
 /** -------- helpers -------- */
 function isMobileDevice(): boolean {
+  // 如果你想在电脑上也使用高清语音，可以直接由 return true;
   const navAny = navigator as any;
   if (typeof navAny?.userAgentData?.mobile === "boolean") return navAny.userAgentData.mobile;
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
@@ -48,7 +51,7 @@ function cleanupEdgeAudio() {
   window.__edgeTtsAudioUrl = null;
 }
 
-/** -------- Desktop: your original Web Speech code (unchanged) -------- */
+/** -------- Desktop: Web Speech API (保持不变) -------- */
 function speakDesktopWebSpeech(
   text: string,
   onEnd?: () => void,
@@ -57,12 +60,13 @@ function speakDesktopWebSpeech(
 ) {
   if (!window.speechSynthesis) {
     console.warn("Web Speech API not supported");
+    onEnd?.();
     return;
   }
 
-  console.log("TTS: Request to speak text:", text ? `"${text.substring(0, 20)}..."` : "<EMPTY>");
+  // console.log("TTS: Desktop Native request:", text);
   if (!text) {
-    if (onEnd) onEnd();
+    onEnd?.();
     return;
   }
 
@@ -74,6 +78,7 @@ function speakDesktopWebSpeech(
     const runSpeak = () => {
       const voices = window.speechSynthesis.getVoices();
 
+      // 尝试寻找系统自带的高质量英文
       const voice =
         voices.find((v) => v.name === "Google US English") ||
         voices.find((v) => v.name.includes("Google") && v.lang.startsWith("en")) ||
@@ -84,7 +89,6 @@ function speakDesktopWebSpeech(
 
       if (voice) {
         utterance.voice = voice;
-        console.log("TTS: Using Voice:", voice.name);
       }
 
       utterance.rate = rate;
@@ -99,7 +103,6 @@ function speakDesktopWebSpeech(
       }
 
       utterance.onend = () => {
-        console.log("TTS: Finished");
         if (keepAliveTimer) clearInterval(keepAliveTimer);
         window.__activeSpeechUtterance = null;
         if (onEnd) onEnd();
@@ -107,8 +110,7 @@ function speakDesktopWebSpeech(
 
       utterance.onerror = (e: any) => {
         if (e.error === "interrupted" || e.error === "canceled") return;
-
-        console.error("TTS Error Event:", e);
+        console.error("TTS Native Error:", e);
         if (keepAliveTimer) clearInterval(keepAliveTimer);
         window.__activeSpeechUtterance = null;
         if (onEnd) onEnd();
@@ -116,6 +118,7 @@ function speakDesktopWebSpeech(
 
       window.speechSynthesis.speak(utterance);
 
+      // Chrome bug fix: prevent garbage collection or silence after 15s
       keepAliveTimer = setInterval(() => {
         if (window.speechSynthesis.speaking) {
           window.speechSynthesis.pause();
@@ -138,7 +141,7 @@ function speakDesktopWebSpeech(
   }, 50);
 }
 
-/** -------- Mobile: GET Worker -> mp3 -> play -------- */
+/** -------- Mobile: Fetch POST OpenAI-Compatible API -> MP3 -------- */
 async function speakMobileViaWorker(text: string, onEnd?: () => void, rate: number = 1.0) {
   if (!text) {
     onEnd?.();
@@ -150,30 +153,41 @@ async function speakMobileViaWorker(text: string, onEnd?: () => void, rate: numb
   const token = (window.__edgeTtsSpeakToken ?? 0) + 1;
   window.__edgeTtsSpeakToken = token;
 
-  // Abortable fetch (so cancel works)
   const ac = new AbortController();
   window.__edgeTtsAbort = ac;
 
   try {
-    const voice = "en-US-AvaNeural"; // keep consistent with your Worker default; you can change here
+    // ⚠️ 关键点：这里使用 'shimmer'，因为我们在 worker 中把它映射到了 Ava Dragon 高清版
+    const voiceModel = "alloy"; 
+    
+    // 构造 API 地址
+    const apiUrl = `${EDGE_TTS_API_BASE.replace(/\/$/, "")}/v1/audio/speech`;
 
-    const u = new URL(EDGE_TTS_WORKER_BASE);
-    u.searchParams.set("text", text);
-    u.searchParams.set("voice", voice);
-    u.searchParams.set("rate", String(rate)); // Worker clamps 0.5~2.0
-
-    const resp = await fetch(u.toString(), {
-      method: "GET",
+    // 使用 POST 请求，符合 OpenAI 接口规范
+    const resp = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${EDGE_TTS_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "tts-1",
+        input: text,
+        voice: voiceModel,
+        speed: rate, // OpenAI API 使用 speed 参数 (0.25 ~ 4.0)
+        response_format: "mp3"
+      }),
       signal: ac.signal,
     });
 
     if (window.__edgeTtsSpeakToken !== token) return;
 
     if (!resp.ok) {
-      const err = await resp.text().catch(() => "");
-      throw new Error(`Worker TTS failed: ${resp.status} ${err}`);
+      const errText = await resp.text().catch(() => "Unknown error");
+      throw new Error(`TTS API Error ${resp.status}: ${errText}`);
     }
 
+    // 获取音频 Blob
     const blob = await resp.blob();
     if (window.__edgeTtsSpeakToken !== token) return;
 
@@ -183,21 +197,29 @@ async function speakMobileViaWorker(text: string, onEnd?: () => void, rate: numb
     const audio = new Audio(url);
     window.__edgeTtsAudio = audio;
 
-    audio.onended = () => {
-      if (window.__edgeTtsSpeakToken === token) cleanupEdgeAudio();
-      onEnd?.();
-    };
-    audio.onerror = () => {
+    // 绑定事件
+    const handleEndOrError = () => {
       if (window.__edgeTtsSpeakToken === token) cleanupEdgeAudio();
       onEnd?.();
     };
 
+    audio.onended = handleEndOrError;
+    audio.onerror = (e) => {
+      console.error("Audio Playback Error", e);
+      handleEndOrError();
+    };
+
     await audio.play();
-  } catch (e) {
-    // fetch aborted is normal on cancel
-    console.error("Mobile TTS error:", e);
-    if (window.__edgeTtsSpeakToken === token) cleanupEdgeAudio();
-    onEnd?.();
+
+  } catch (e: any) {
+    // 如果是手动取消 (AbortError)，则不报错
+    if (e.name === "AbortError") {
+      // expected behavior on cancel
+    } else {
+      console.error("Mobile TTS fetch error:", e);
+      if (window.__edgeTtsSpeakToken === token) cleanupEdgeAudio();
+      onEnd?.();
+    }
   }
 }
 
@@ -208,24 +230,27 @@ export const tts = {
     rate: number = 1.0,
     onBoundary?: (charIndex: number) => void
   ) => {
+    // 判断是否使用云端 TTS (移动端默认使用，PC端如果想用高清语音也可以把 isMobileDevice() 改为 true)
     if (isMobileDevice()) {
-      // Mobile uses Worker (no boundary events in mp3 mode)
+      // Mobile uses Cloudflare Worker (MP3 stream, no boundary events)
       void speakMobileViaWorker(text, onEnd, rate);
       return;
     }
 
-    // Desktop unchanged
+    // Desktop uses Browser Native TTS
     speakDesktopWebSpeech(text, onEnd, rate, onBoundary);
   },
 
   cancel: () => {
     // Desktop cancel
-    window.speechSynthesis?.cancel();
+    if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+    }
     if (keepAliveTimer) clearInterval(keepAliveTimer);
     window.__activeSpeechUtterance = null;
 
     // Mobile cancel
-    window.__edgeTtsSpeakToken = (window.__edgeTtsSpeakToken ?? 0) + 1; // invalidate in-flight
+    window.__edgeTtsSpeakToken = (window.__edgeTtsSpeakToken ?? 0) + 1;
     cleanupEdgeAudio();
   },
 };
