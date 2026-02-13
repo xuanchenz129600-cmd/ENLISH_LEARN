@@ -18,7 +18,7 @@ declare global {
 let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
 
 // Your GET worker endpoint
-const EDGE_TTS_WORKER_BASE = "https://my-edge-tts.xuanchenz129600.workers.dev/";
+const EDGE_TTS_WORKER_BASE = "https://zhangchen981109.dpdns.org/";
 
 /** -------- helpers -------- */
 function isMobileDevice(): boolean {
