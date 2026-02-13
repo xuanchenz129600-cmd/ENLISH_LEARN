@@ -18,16 +18,14 @@ declare global {
 let keepAliveTimer: ReturnType<typeof setInterval> | null = null;
 
 // 👇👇👇 请在这里配置你的 Cloudflare Pages 信息 👇👇👇
-const EDGE_TTS_API_BASE = "https://myprotts.xuanchenz129600.workers.dev"; // 你的 Pages 域名 (不要带 /v1/...)
+const EDGE_TTS_API_BASE = "https://zhangchen981109.dpdns.org"; // 你的 Pages 域名 (不要带 /v1/...)
 const EDGE_TTS_API_KEY = "sk-123456"; // 你在 Pages 设置里填写的 API_KEY
 // 👆👆👆 配置结束 👆👆👆
 
 /** -------- helpers -------- */
 function isMobileDevice(): boolean {
   // 如果你想在电脑上也使用高清语音，可以直接由 return true;
-  const navAny = navigator as any;
-  if (typeof navAny?.userAgentData?.mobile === "boolean") return navAny.userAgentData.mobile;
-  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  return true; 
 }
 
 function cleanupEdgeAudio() {
