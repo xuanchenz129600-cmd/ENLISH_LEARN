@@ -24,7 +24,7 @@ export const quizService = {
       const unitWords = db.getWords(unitId);
       const unitSentences = db.getSentences(unitId);
       
-      const wordsData = unitWords.map(w => `${w.text} (释义: ${w.definition})`).join('; ');
+      const wordsData = unitWords.map(w => `${w.text} (释义: ${w.meaning})`).join('; ');
       const sentencesData = unitSentences.map(s => s.text).join('; ');
 
       if (unitWords.length < 3) {
