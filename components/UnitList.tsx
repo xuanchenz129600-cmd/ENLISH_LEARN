@@ -1,20 +1,40 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Unit } from '../types';
+import { Unit, QuizConfig } from '../types';
 import { db } from '../services/storage';
-import { Plus, MoreHorizontal, ArrowUpRight, Sparkles, BoxSelect, Trash2, Edit2, X } from 'lucide-react';
+import { 
+  Plus, ArrowUpRight, Sparkles, BoxSelect, 
+  Trash2, Edit2, X, PlayCircle, Settings2 
+} from 'lucide-react';
+import QuizModal from './QuizModal';
 
 interface Props {
   onSelectUnit: (unit: Unit) => void;
 }
 
 const UnitList: React.FC<Props> = ({ onSelectUnit }) => {
+  // --- 基础状态 ---
   const [units, setUnits] = useState<Unit[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newUnitName, setNewUnitName] = useState('');
   const [editUnitId, setEditUnitId] = useState<string | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   
-  // Ref for the container to calculate relative mouse position
+  // --- 考核相关状态 ---
+  const [quizUnit, setQuizUnit] = useState<Unit | null>(null);
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  
+  // 默认考核配置
+  const [quizConfig, setQuizConfig] = useState<QuizConfig>({
+    difficulty: 'Intermediate',
+    counts: {
+      listeningChoice: 2,
+      readingWord: 2,
+      listeningContext: 2,
+      contextChoice: 2,
+      readingComp: 3
+    }
+  });
+
   const containerRef = useRef<HTMLDivElement>(null);
 
   const loadUnits = () => {
@@ -25,6 +45,7 @@ const UnitList: React.FC<Props> = ({ onSelectUnit }) => {
     loadUnits();
   }, []);
 
+  // --- 单元管理逻辑 ---
   const handleCreate = () => {
     if (!newUnitName.trim()) return;
     if (editUnitId) {
@@ -53,18 +74,14 @@ const UnitList: React.FC<Props> = ({ onSelectUnit }) => {
     setIsModalOpen(true);
   };
 
-  // Global Mouse Move for Spotlight Effect
+  // --- 视觉效果逻辑 ---
   const handleMouseMove = (e: React.MouseEvent) => {
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
-      setMousePos({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      });
+      setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
     }
   };
 
-  // Helper to generate abstract gradient colors based on unit ID
   const getGradient = (id: string) => {
     const hash = id.charCodeAt(0) + id.charCodeAt(id.length - 1);
     const hues = [
@@ -76,24 +93,36 @@ const UnitList: React.FC<Props> = ({ onSelectUnit }) => {
     return hues[hash % hues.length];
   };
 
+  // --- 考核配置逻辑 ---
+  const updateCount = (key: keyof QuizConfig['counts'], delta: number) => {
+    setQuizConfig(prev => ({
+      ...prev,
+      counts: {
+        ...prev.counts,
+        [key]: Math.max(0, prev.counts[key] + delta)
+      }
+    }));
+  };
+
+  const handleStartQuiz = () => {
+    // 关闭配置弹窗，此时 quizUnit 仍有值，所以 QuizModal 会被渲染
+    setIsConfigOpen(false);
+  };
+
   return (
     <div 
       ref={containerRef}
       onMouseMove={handleMouseMove}
       className="h-full relative overflow-y-auto bg-gray-50 dark:bg-black text-gray-900 dark:text-white no-scrollbar font-sans selection:bg-indigo-500/20 transition-colors duration-500"
     >
-      {/* === LAYER 0: LUMINOUS ATMOSPHERE === */}
+      {/* === LAYER 0: 背景氛围 === */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-         {/* Noise Texture Overlay */}
          <div className="absolute inset-0 bg-noise opacity-20 dark:opacity-30 mix-blend-multiply dark:mix-blend-overlay fixed"></div>
-         
-         {/* Floating Aurora Blobs */}
          <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-indigo-300/30 dark:bg-indigo-900/20 rounded-full blur-[100px] animate-float opacity-60"></div>
          <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-emerald-300/30 dark:bg-emerald-900/10 rounded-full blur-[120px] animate-float-delayed opacity-50"></div>
-         <div className="absolute top-[40%] left-[50%] w-[40vw] h-[40vw] bg-purple-300/30 dark:bg-purple-900/10 rounded-full blur-[90px] animate-pulse-glow opacity-40"></div>
       </div>
 
-      {/* === LAYER 1: CONTENT === */}
+      {/* === LAYER 1: 内容区 === */}
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-12 md:px-12 md:py-20 flex flex-col min-h-screen">
         
         {/* Header Section */}
@@ -117,7 +146,7 @@ const UnitList: React.FC<Props> = ({ onSelectUnit }) => {
         {/* Bento Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-[280px]">
           
-          {/* New Unit Button (First Item) */}
+          {/* Create Unit Button */}
           <button
             onClick={() => {
               setEditUnitId(null);
@@ -125,7 +154,6 @@ const UnitList: React.FC<Props> = ({ onSelectUnit }) => {
               setIsModalOpen(true);
             }}
             className="group relative flex flex-col items-center justify-center glass-panel rounded-3xl p-8 hover:bg-white/40 dark:hover:bg-white/5 transition-all duration-500 border-dashed border border-gray-300 dark:border-white/20 hover:border-gray-400 dark:hover:border-white/50 animate-slide-up"
-            style={{ animationDelay: '0ms' }}
           >
             <div className="w-16 h-16 rounded-full border border-gray-300 dark:border-white/20 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-gray-900 group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-black text-gray-400 dark:text-gray-300 transition-all duration-300">
               <Plus size={32} strokeWidth={1.5} />
@@ -133,38 +161,30 @@ const UnitList: React.FC<Props> = ({ onSelectUnit }) => {
             <span className="font-serif text-xl text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Initialize Unit</span>
           </button>
 
-          {/* Unit Cards */}
+          {/* Unit Cards Loop */}
           {units.map((unit, index) => {
             const wordCount = db.getWords(unit.id).length;
             const sentCount = db.getSentences(unit.id).length;
             const textCount = db.getTexts(unit.id).length;
             
-            // Bento Logic: Every 4th item spans 2 cols (just for visual variation)
             const isWide = index > 0 && index % 6 === 0;
-            const spanClass = isWide ? 'md:col-span-2' : '';
             const gradientClass = getGradient(unit.id);
 
             return (
               <div
                 key={unit.id}
                 onClick={() => onSelectUnit(unit)}
-                className={`group relative glass-card rounded-3xl p-8 flex flex-col justify-between overflow-hidden cursor-pointer animate-slide-up ${spanClass}`}
+                className={`group relative glass-card rounded-3xl p-8 flex flex-col justify-between overflow-hidden cursor-pointer animate-slide-up ${isWide ? 'md:col-span-2' : ''}`}
                 style={{ animationDelay: `${(index + 1) * 100}ms` }}
               >
-                {/* Internal Ambient Glow (Static) */}
+                {/* Internal Glows */}
                 <div className={`absolute -top-1/2 -right-1/2 w-full h-full bg-gradient-to-br ${gradientClass} opacity-60 blur-3xl rounded-full group-hover:opacity-80 transition-opacity duration-1000`}></div>
                 
-                {/* Internal Slow Spin Glow */}
-                <div className="absolute bottom-[-50%] left-[-20%] w-[80%] h-[80%] bg-white/20 dark:bg-white/5 rounded-full blur-2xl animate-spin-slow opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-
-                {/* Card Content */}
                 <div className="relative z-10">
                   <div className="flex justify-between items-start mb-4">
-                     <div className="w-10 h-10 rounded-full bg-white/40 dark:bg-white/5 flex items-center justify-center text-gray-500 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white group-hover:bg-white/60 dark:group-hover:bg-white/10 transition-colors">
+                     <div className="w-10 h-10 rounded-full bg-white/40 dark:bg-white/5 flex items-center justify-center text-gray-500 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
                         <BoxSelect size={18} />
                      </div>
-                     
-                     {/* Actions (Hidden by default, show on hover) */}
                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-y-[-10px] group-hover:translate-y-0">
                         <button onClick={(e) => openEdit(unit, e)} className="p-2 hover:bg-white/20 rounded-full text-gray-600 dark:text-white"><Edit2 size={14}/></button>
                         <button onClick={(e) => handleDelete(unit.id, e)} className="p-2 hover:bg-red-500/20 hover:text-red-500 rounded-full text-gray-400 dark:text-gray-400"><Trash2 size={14}/></button>
@@ -186,12 +206,27 @@ const UnitList: React.FC<Props> = ({ onSelectUnit }) => {
                     <span>/</span>
                     <span>{textCount} TXT</span>
                   </div>
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-x-4 group-hover:translate-x-0">
-                    <ArrowUpRight className="text-gray-800 dark:text-white" />
+                  
+                  {/* Action Buttons: Play (Assessment) & Open */}
+                  <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-4 group-hover:translate-x-0">
+                    <button 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        setQuizUnit(unit); 
+                        setIsConfigOpen(true); // 打开配置界面
+                      }}
+                      className="p-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-500 shadow-xl shadow-indigo-500/20 active:scale-95 transition-all"
+                      title="Start Assessment"
+                    >
+                        <PlayCircle size={22} />
+                    </button>
+                    <div className="p-3 bg-white/10 dark:bg-white/5 rounded-full text-gray-800 dark:text-white">
+                      <ArrowUpRight size={22} />
+                    </div>
                   </div>
                 </div>
 
-                {/* Dynamic Spotlight Border Effect */}
+                {/* Spotlight Effect */}
                 <div 
                   className="absolute inset-0 rounded-3xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                   style={{
@@ -204,15 +239,98 @@ const UnitList: React.FC<Props> = ({ onSelectUnit }) => {
         </div>
       </div>
 
-      {/* === MODAL: DARK GLASS === */}
+      {/* === MODAL: ASSESSMENT CONFIG (配置层) === */}
+      {isConfigOpen && quizUnit && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-md animate-fade-in" onClick={() => setIsConfigOpen(false)}></div>
+          
+          <div className="relative w-full max-w-md bg-white dark:bg-[#0d0d0d] border border-gray-200 dark:border-white/10 rounded-[2.5rem] p-8 shadow-2xl animate-pop overflow-hidden">
+            {/* Top Decoration */}
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500"></div>
+            
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="font-serif text-2xl text-gray-900 dark:text-white flex items-center gap-2">
+                <Settings2 size={24} className="text-indigo-500" /> Assessment Settings
+              </h2>
+              <button onClick={() => setIsConfigOpen(false)} className="text-gray-400 hover:text-gray-900 dark:hover:text-white"><X size={24} /></button>
+            </div>
+
+            {/* 1. Difficulty Selector */}
+            <div className="mb-8">
+              <label className="text-[10px] font-mono text-gray-400 uppercase tracking-widest block mb-3">Target Difficulty</label>
+              <div className="flex bg-gray-100 dark:bg-white/5 p-1 rounded-2xl">
+                {(['Elementary', 'Intermediate', 'Advanced'] as const).map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setQuizConfig({ ...quizConfig, difficulty: d })}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                      quizConfig.difficulty === d 
+                      ? 'bg-white dark:bg-white/10 text-indigo-500 shadow-sm' 
+                      : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. Question Matrix (Counts) */}
+            <div className="space-y-3 mb-8">
+              <label className="text-[10px] font-mono text-gray-400 uppercase tracking-widest block mb-2">Question Distribution</label>
+              {Object.entries(quizConfig.counts).map(([key, value]) => (
+                <div key={key} className="flex items-center justify-between bg-gray-50 dark:bg-white/5 px-4 py-3 rounded-2xl border border-transparent hover:border-indigo-500/20 transition-colors">
+                  <span className="text-xs text-gray-600 dark:text-gray-400 font-medium capitalize">
+                    {key.replace(/([A-Z])/g, ' $1')}
+                  </span>
+                  <div className="flex items-center gap-4">
+                    <button 
+                      onClick={() => updateCount(key as keyof QuizConfig['counts'], -1)} 
+                      className="w-8 h-8 rounded-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-500 hover:text-indigo-500 active:bg-gray-200 dark:active:bg-white/10"
+                    >
+                      -
+                    </button>
+                    <span className="text-sm font-mono dark:text-white w-4 text-center">{value}</span>
+                    <button 
+                      onClick={() => updateCount(key as keyof QuizConfig['counts'], 1)} 
+                      className="w-8 h-8 rounded-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-500 hover:text-indigo-500 active:bg-gray-200 dark:active:bg-white/10"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Start Button */}
+            <button 
+              onClick={handleStartQuiz} 
+              className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-500 shadow-xl shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+            >
+              <Sparkles size={18} /> Materialize Quiz
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* === COMPONENT: QUIZ MODAL (实际考核界面) === */}
+      {/* 仅当 quizUnit 存在且配置层关闭时显示 */}
+      {quizUnit && !isConfigOpen && (
+        <QuizModal 
+          unitId={quizUnit.id} 
+          unitName={quizUnit.name} 
+          config={quizConfig} // 传递配置
+          onClose={() => setQuizUnit(null)} 
+        />
+      )}
+
+      {/* === MODAL: CREATE/RENAME UNIT === */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-gray-200/60 dark:bg-black/80 backdrop-blur-md animate-fade-in" onClick={() => setIsModalOpen(false)}></div>
           
           <div className="relative w-full max-w-md bg-white dark:bg-[#0a0a0a] border border-gray-200 dark:border-white/10 rounded-[2rem] p-8 shadow-2xl animate-pop overflow-hidden">
-             {/* Modal Background decoration */}
              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500"></div>
-             <div className="absolute top-[-50%] right-[-50%] w-[80%] h-[80%] bg-blue-500/10 dark:bg-blue-600/10 rounded-full blur-[80px]"></div>
 
              <div className="relative z-10">
                 <div className="flex justify-between items-center mb-8">
