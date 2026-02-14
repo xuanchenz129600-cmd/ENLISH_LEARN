@@ -232,6 +232,7 @@ const UnitList: React.FC<Props> = ({ onSelectUnit }) => {
                       <ArrowUpRight size={22} />
                     </div>
                     </div>
+                  </div>
 
                 {/* Spotlight Effect */}
                 <div 
