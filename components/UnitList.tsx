@@ -208,23 +208,30 @@ const UnitList: React.FC<Props> = ({ onSelectUnit }) => {
                   </div>
                   
                   {/* Action Buttons: Play (Assessment) & Open */}
-                  <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-4 group-hover:translate-x-0">
+                  <div className="flex gap-3 
+                    /* 移动端默认显示，不偏移 */
+                    opacity-100 translate-x-0 
+                    /* 只有在 md 尺寸（桌面端）以上才应用 hover 隐藏逻辑 */
+                    md:opacity-0 md:group-hover:opacity-100 
+                    md:translate-x-4 md:group-hover:translate-x-0 
+                    transition-all duration-300">
+                    
                     <button 
                       onClick={(e) => { 
                         e.stopPropagation(); 
                         setQuizUnit(unit); 
-                        setIsConfigOpen(true); // 打开配置界面
+                        setIsConfigOpen(true); 
                       }}
                       className="p-3 bg-indigo-600 text-white rounded-full hover:bg-indigo-500 shadow-xl shadow-indigo-500/20 active:scale-95 transition-all"
                       title="Start Assessment"
                     >
                         <PlayCircle size={22} />
                     </button>
+                    
                     <div className="p-3 bg-white/10 dark:bg-white/5 rounded-full text-gray-800 dark:text-white">
                       <ArrowUpRight size={22} />
                     </div>
-                  </div>
-                </div>
+                    </div>
 
                 {/* Spotlight Effect */}
                 <div 
