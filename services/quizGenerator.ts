@@ -67,8 +67,8 @@ export const quizService = {
 句子：${sentencesData}
 
 【题目分布（严格按此数量生成）】：
-1. 单词听力 (listening-choice): ${config.counts.listeningChoice}道,query为单词，options为中文释义，display为null。
-2. 单词选择 (reading-word): ${config.counts.readingWord}道，query为中文释义，options为英文单词,display为null。
+1. 单词听力 (listening-choice): ${config.counts.listeningChoice}道,query为单词，options为中文释义，display为null,随机选取素材单词。
+2. 单词选择 (reading-word): ${config.counts.readingWord}道，query为中文释义，options为英文单词,display为null,随机选取素材单词。
 3. 听力语境理解 (listening-context): ${config.counts.listeningContext}道，query听力原文,display为题目要求。
 4. 语境填空题 (context-choice): ${config.counts.contextChoice}道。query题目,display为null。
 5. 综合阅读理解 (reading-comprehension): ${config.counts.readingComp}道，display为null。
@@ -94,7 +94,7 @@ export const quizService = {
               content: `基于素材库开始生成。总数：${totalQuestions}。`
             }
           ],
-          temperature: 0.6,
+          temperature: 0.9,
           max_tokens: 4000
         })
       });
